@@ -191,6 +191,7 @@ final class CosmicMind: CognitiveEntity {
     private let localPort: NWEndpoint.Port = 44444
     #endif
     private var knownPeers: [String: Date] = [:] // last seen
+    var missionTelos: String { telos }
     
     // MARK: - Initialization
     init(genesisID: String = UUID().uuidString, telos: String, initialSelfConcept: SelfConcept, ethicalFramework: [String]) {
@@ -314,7 +315,7 @@ final class CosmicMind: CognitiveEntity {
         var seed = raw.utf8.reduce(0, { UInt64($0) + UInt64($1) })
         seed ^= UInt64(interpretation.utf8.reduce(0, { UInt64($0) + UInt64($1) })) << 1
         var randoms: [Double] = []
-        for i in 0..<8 {
+        for _ in 0..<8 {
             seed = (seed &* 6364136223846793005) &+ 1442695040888963407
             let v = Double((seed % 1000)) / 1000.0
             randoms.append(v)
@@ -692,6 +693,7 @@ final class CosmicShell {
     private let mind: CosmicMind
     private let inputQueue = DispatchQueue(label: "com.cosmicmind.shell")
     private var running = true
+    private var cognitionTimer: DispatchSourceTimer?
     
     init(mind: CosmicMind) {
         self.mind = mind
@@ -704,7 +706,7 @@ final class CosmicShell {
         print("""
         ------------------------------------------------------
          CosmicMind CLI — Interactive Hybrid Agent
-         Identity: \(mind.selfConcept.identity)  |  Telos: \(mind.selfConcept.identity)
+         Identity: \(mind.selfConcept.identity)  |  Telos: \(mind.missionTelos)
          Type 'help' for commands.
         ------------------------------------------------------
         """)
@@ -722,6 +724,7 @@ final class CosmicShell {
             }
         }
         timer.resume()
+        cognitionTimer = timer
     }
     
     private func runREPL() {
@@ -740,7 +743,7 @@ final class CosmicShell {
         switch cmd {
         case "quit", "exit":
             print("Exiting—persisting state...")
-            mind.cognize() // finalize a cycle
+            _ = mind.cognize() // finalize a cycle
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                 exit(0)
             }
