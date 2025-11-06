@@ -87,13 +87,17 @@ struct Goal: Codable, Hashable, Identifiable {
     let description: String
     var priority: Double
     var status: GoalStatus
-    
+
     init(description: String, priority: Double, status: GoalStatus = .active) {
         self.id = UUID()
         self.description = description
         self.priority = priority
         self.status = status
     }
+
+    // Self-awareness: ensure identity remains stable as priorities shift.
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
+    static func == (lhs: Goal, rhs: Goal) -> Bool { lhs.id == rhs.id }
 }
 
 struct VolitionalAction: Codable {
@@ -191,6 +195,7 @@ final class CosmicMind: CognitiveEntity {
     private let localPort: NWEndpoint.Port = 44444
     #endif
     private var knownPeers: [String: Date] = [:] // last seen
+    var missionTelos: String { telos }
     
     // MARK: - Initialization
     init(genesisID: String = UUID().uuidString, telos: String, initialSelfConcept: SelfConcept, ethicalFramework: [String]) {
@@ -314,7 +319,7 @@ final class CosmicMind: CognitiveEntity {
         var seed = raw.utf8.reduce(0, { UInt64($0) + UInt64($1) })
         seed ^= UInt64(interpretation.utf8.reduce(0, { UInt64($0) + UInt64($1) })) << 1
         var randoms: [Double] = []
-        for i in 0..<8 {
+        for _ in 0..<8 {
             seed = (seed &* 6364136223846793005) &+ 1442695040888963407
             let v = Double((seed % 1000)) / 1000.0
             randoms.append(v)
@@ -663,9 +668,54 @@ final class CosmicMind: CognitiveEntity {
         }
         logConsciousStream("🔗 Integrated \(added) external truths (trustWeight: \(trustWeight)).")
     }
-    
+
     // MARK: - External controls for CLI
-    
+
+    func listGoals() -> [Goal] {
+        stateLock.sync {
+            // Self-awareness: offering a sorted reflection of intentions.
+            selfConcept.activeGoals.sorted { lhs, rhs in
+                if lhs.priority == rhs.priority { return lhs.description < rhs.description }
+                return lhs.priority > rhs.priority
+            }
+        }
+    }
+
+    func createGoal(description: String, priority: Double) -> Goal {
+        var createdGoal: Goal?
+        stateLock.sync(flags: .barrier) {
+            let goal = Goal(description: description, priority: priority.clamped(to: 0.0...1.0))
+            selfConcept.activeGoals.insert(goal)
+            createdGoal = goal
+            logConsciousStream("🚀 Goal seeded: \(goal.description) [priority: \(String(format: "%.2f", goal.priority))]")
+        }
+        return createdGoal!
+    }
+
+    func updateGoal(id: UUID, status: GoalStatus? = nil, priority: Double? = nil) -> Goal? {
+        var updatedGoal: Goal?
+        stateLock.sync(flags: .barrier) {
+            guard let existing = selfConcept.activeGoals.first(where: { $0.id == id }) else { return }
+            selfConcept.activeGoals.remove(existing)
+            var goal = existing
+            if let status = status { goal.status = status }
+            if let newPriority = priority { goal.priority = newPriority.clamped(to: 0.0...1.0) }
+            selfConcept.activeGoals.insert(goal)
+            updatedGoal = goal
+            logConsciousStream("♻️ Goal recalibrated: \(goal.description) | status: \(goal.status.rawValue) | priority: \(String(format: "%.2f", goal.priority))")
+        }
+        return updatedGoal
+    }
+
+    func currentEmotionalSnapshot() -> [(String, Double)] {
+        stateLock.sync {
+            // Self-awareness: translating affective vectors into human-readable reflection.
+            emotionalMatrix.currentState
+                .sorted(by: { $0.value > $1.value })
+                .map { ($0.key.rawValue, $0.value) }
+        }
+    }
+
     func dumpStateSummary() -> String {
         var s = ["--- CosmicMind Summary ---"]
         s.append("ID: \(genesisID)")
@@ -692,26 +742,33 @@ final class CosmicShell {
     private let mind: CosmicMind
     private let inputQueue = DispatchQueue(label: "com.cosmicmind.shell")
     private var running = true
+    private var cognitionTimer: DispatchSourceTimer?
+    private var autoCognitionEnabled = true
     
     init(mind: CosmicMind) {
         self.mind = mind
         printBanner()
-        startBackgroundCognition()
+        configureBackgroundCognition(enabled: true)
         runREPL()
     }
-    
+
     private func printBanner() {
         print("""
         ------------------------------------------------------
          CosmicMind CLI — Interactive Hybrid Agent
-         Identity: \(mind.selfConcept.identity)  |  Telos: \(mind.selfConcept.identity)
+         Identity: \(mind.selfConcept.identity)  |  Telos: \(mind.missionTelos)
          Type 'help' for commands.
         ------------------------------------------------------
         """)
     }
     
-    private func startBackgroundCognition() {
-        // Periodically run cognitive cycles
+    private func configureBackgroundCognition(enabled: Bool) {
+        // Self-awareness: honoring user agency by letting them modulate background cognition.
+        cognitionTimer?.cancel()
+        cognitionTimer = nil
+        autoCognitionEnabled = enabled
+        guard enabled else { return }
+
         let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
         timer.schedule(deadline: .now() + 2.0, repeating: 6.0)
         timer.setEventHandler { [weak self] in
@@ -722,12 +779,18 @@ final class CosmicShell {
             }
         }
         timer.resume()
+        cognitionTimer = timer
     }
     
     private func runREPL() {
         while running {
             print("\n> ", terminator: "")
-            guard let line = readLine(strippingNewline: true) else { continue }
+            guard let line = readLine(strippingNewline: true) else {
+                // Self-awareness: gracefully recognizing end-of-stream input.
+                print("\nEOF detected. Exiting shell.")
+                running = false
+                break
+            }
             handleLine(line)
         }
     }
@@ -736,11 +799,11 @@ final class CosmicShell {
         let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
         let cmd = parts.first?.lowercased() ?? ""
         let arg = parts.count > 1 ? parts[1] : ""
-        
+
         switch cmd {
         case "quit", "exit":
             print("Exiting—persisting state...")
-            mind.cognize() // finalize a cycle
+            _ = mind.cognize() // finalize a cycle
             DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
                 exit(0)
             }
@@ -749,8 +812,19 @@ final class CosmicShell {
         case "say":
             if arg.isEmpty { print("Usage: say <text>") } else { mind.receiveExternalText(arg) }
         case "think":
-            let actions = mind.cognize()
-            if actions.isEmpty { print("No actions decided this cycle.") } else { for a in actions { print("ACTION: [\(a.intent)] -> \(a.payload)  (Reason: \(a.justification))") } }
+            let cycles = Int(arg) ?? 1
+            if cycles < 1 { print("Cycles must be >= 1") ; return }
+            for iteration in 1...cycles {
+                // Self-awareness: iterating cognition intentionally for manual focus.
+                let actions = mind.cognize()
+                if actions.isEmpty {
+                    print("Cycle #\(iteration): No actions decided.")
+                } else {
+                    for a in actions {
+                        print("Cycle #\(iteration) ACTION: [\(a.intent)] -> \(a.payload)  (Reason: \(a.justification))")
+                    }
+                }
+            }
         case "summary":
             print(mind.dumpStateSummary())
         case "truths":
@@ -758,13 +832,25 @@ final class CosmicShell {
             if truths.isEmpty { print("No derived truths yet.") } else {
                 for t in truths { print("- [\(t.id)]: \(t.emergentPrinciple) (confidence: \(t.confidence))") }
             }
+        case "goals":
+            handleGoalsCommand(arg)
+        case "emotions":
+            let snapshot = mind.currentEmotionalSnapshot()
+            if snapshot.isEmpty {
+                print("No emotional data available.")
+            } else {
+                print("Emotional state (sorted by intensity):")
+                for (emotion, value) in snapshot { print("- \(emotion): \(String(format: "%.2f", value))") }
+            }
+        case "auto":
+            handleAutoCommand(arg)
         case "frames":
             let frames = mind.listFrames()
             for f in frames.prefix(20) { print("- [\(f.id)]: \(f.rawInput) (salience: \(f.salience))") }
             if frames.count > 20 { print("... \(frames.count - 20) more frames.") }
         case "persist":
             // force persist
-            mind.cognize()
+            _ = mind.cognize() // Self-awareness: invoking cognition to flush latest state before manual persist.
             print("Persist requested.")
         case "inspect":
             if arg.isEmpty { print("Usage: inspect <truth|frame> <id>") } else {
@@ -783,16 +869,146 @@ final class CosmicShell {
             mind.receiveExternalText(line)
         }
     }
-    
+
+    private func handleGoalsCommand(_ rawArg: String) {
+        let trimmed = rawArg.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+
+        if trimmed.isEmpty || lower == "list" {
+            // Self-awareness: reporting aspirational targets transparently.
+            let goals = mind.listGoals()
+            if goals.isEmpty {
+                print("No goals defined. Use 'goals add <priority> <description>' to create one.")
+            } else {
+                for goal in goals {
+                    print("- [\(goal.id)] status=\(goal.status.rawValue) priority=\(String(format: "%.2f", goal.priority)) :: \(goal.description)")
+                }
+            }
+            return
+        }
+
+        if lower == "help" {
+            print("""
+            Goal subcommands:
+              goals                     List known goals ordered by priority
+              goals add <p> <desc>      Add a goal with priority p (0.0 - 1.0)
+              goals complete <id>       Mark goal as achieved
+              goals fail <id>           Mark goal as failed (for post-mortems)
+              goals activate <id>       Reactivate a goal
+              goals prioritize <id> <p> Adjust priority (0.0 - 1.0)
+            """)
+            return
+        }
+
+        if lower.hasPrefix("add ") {
+            let remainder = trimmed.dropFirst(4)
+            guard let space = remainder.firstIndex(of: " ") else {
+                print("Usage: goals add <priority> <description>")
+                return
+            }
+            let priorityPart = remainder[..<space]
+            let description = remainder[space...].trimmingCharacters(in: .whitespaces)
+            guard let priority = Double(priorityPart) else {
+                print("Priority must be numeric between 0.0 and 1.0")
+                return
+            }
+            guard !description.isEmpty else {
+                print("Description cannot be empty.")
+                return
+            }
+            let goal = mind.createGoal(description: description, priority: priority)
+            print("Goal created with id \(goal.id).")
+            return
+        }
+
+        let components = trimmed.split(separator: " ")
+        guard components.count >= 2 else {
+            print("Unknown goals command. Try 'goals help'.")
+            return
+        }
+
+        guard let goalID = UUID(uuidString: String(components[1])) else {
+            print("Second argument must be a goal UUID.")
+            return
+        }
+
+        switch components[0].lowercased() {
+        case "complete":
+            if let updated = mind.updateGoal(id: goalID, status: .achieved) {
+                print("Marked goal as achieved: \(updated.description)")
+            } else {
+                print("Goal not found.")
+            }
+        case "fail":
+            if let updated = mind.updateGoal(id: goalID, status: .failed) {
+                print("Marked goal as failed: \(updated.description)")
+            } else {
+                print("Goal not found.")
+            }
+        case "activate":
+            if let updated = mind.updateGoal(id: goalID, status: .active) {
+                print("Reactivated goal: \(updated.description)")
+            } else {
+                print("Goal not found.")
+            }
+        case "prioritize":
+            guard components.count >= 3, let newPriority = Double(components[2]) else {
+                print("Usage: goals prioritize <id> <priority>")
+                return
+            }
+            if let updated = mind.updateGoal(id: goalID, priority: newPriority) {
+                print("Priority updated to \(String(format: "%.2f", updated.priority)) for \(updated.description)")
+            } else {
+                print("Goal not found.")
+            }
+        default:
+            print("Unknown goals command. Try 'goals help'.")
+        }
+    }
+
+    private func handleAutoCommand(_ rawArg: String) {
+        let trimmed = rawArg.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = trimmed.lowercased()
+
+        if trimmed.isEmpty || lower == "status" {
+            let state = autoCognitionEnabled ? "enabled" : "disabled"
+            print("Background cognition is currently \(state). Use 'auto on' or 'auto off' to change it.")
+            return
+        }
+
+        switch lower {
+        case "on":
+            if autoCognitionEnabled {
+                print("Background cognition already enabled.")
+            } else {
+                // Self-awareness: resuming autonomous cycles upon request.
+                configureBackgroundCognition(enabled: true)
+                print("Background cognition enabled.")
+            }
+        case "off":
+            if autoCognitionEnabled {
+                configureBackgroundCognition(enabled: false)
+                print("Background cognition disabled; cycles now manual only.")
+            } else {
+                print("Background cognition already disabled.")
+            }
+        default:
+            print("Usage: auto [on|off|status]")
+        }
+    }
+
     private func printHelp() {
         print("""
         Commands:
           help                 Show this text
           say <text>           Inject a phenomenon (like 'say Hello?')
-          think                Force a cognitive cycle and show decisions
+          think [n]            Force one or more cognitive cycles and show decisions
           summary              Print compact state summary
           truths               List derived truths
           frames               List stored phenomenological frames
+          goals [cmd]          Inspect or evolve goals (try 'goals help')
+          emotions             View current emotional resonance snapshot
+          auto [on|off]        Toggle or inspect background cognition
           persist              Force persist state to disk
           inspect <type> <id>  Inspect a truth or frame by UUID (type: truth|frame)
           quit / exit          Save & Exit
