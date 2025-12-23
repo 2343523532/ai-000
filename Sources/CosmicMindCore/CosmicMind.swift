@@ -1,176 +1,19 @@
-#!/usr/bin/env swift
 import Foundation
 import Dispatch
 #if canImport(Network)
 import Network // macOS / modern platforms
 #endif
 
-// MARK: - Utility Extensions
-
-extension Double {
-    func clamped(to range: ClosedRange<Double>) -> Double { min(max(self, range.lowerBound), range.upperBound) }
-}
-extension Date {
-    func iso8601() -> String { ISO8601DateFormatter().string(from: self) }
-}
-extension Array {
-    func safeIndex(_ i: Int) -> Element? { (i >= 0 && i < count) ? self[i] : nil }
-}
-func now() -> Date { Date() }
-
-// MARK: - Foundational Data Structures
-
-protocol CognitiveEntity {
-    var id: String { get }
-    var selfConcept: SelfConcept { get }
-    func ingestPhenomenon(input: String)
-    func cognize() -> [VolitionalAction]
-}
-
-struct QualiaSignature: Codable, Hashable {
-    let vector: [Double]
-    func distance(to other: QualiaSignature) -> Double {
-        guard vector.count == other.vector.count else { return Double.infinity }
-        let sum = zip(vector, other.vector).map { ($0 - $1) * ($0 - $1) }.reduce(0, +)
-        return sqrt(sum)
-    }
-}
-
-// MARK: - Core Cognitive Components
-
-struct PhenomenologicalFrame: Codable, Hashable, Identifiable {
-    let id: UUID
-    let timestamp: Date
-    let rawInput: String
-    let subjectiveInterpretation: String
-    let emotionalResonance: [Emotion: Double]
-    let qualiaSignature: QualiaSignature
-    var connections: Set<UUID> = []
-    var salience: Double = 0.5
-}
-
-struct AbstractTruth: Codable, Hashable, Identifiable {
-    let id: UUID
-    let coreConcept: String
-    let supportingFrames: Set<UUID>
-    let confidence: Double
-    let emergentPrinciple: String
-    
-    init(coreConcept: String, supportingFrames: Set<UUID>, confidence: Double, emergentPrinciple: String) {
-        self.id = UUID()
-        self.coreConcept = coreConcept
-        self.supportingFrames = supportingFrames
-        self.confidence = confidence
-        self.emergentPrinciple = emergentPrinciple
-    }
-}
-
-struct Hypothesis: Codable, Hashable, Identifiable {
-    let id: UUID
-    let prediction: String
-    let supportingTruthID: UUID
-    var confidence: Double
-    var isViolated: Bool = false
-    
-    init(prediction: String, supportingTruthID: UUID, confidence: Double) {
-        self.id = UUID()
-        self.prediction = prediction
-        self.supportingTruthID = supportingTruthID
-        self.confidence = confidence
-    }
-}
-
-enum GoalStatus: String, Codable { case active, achieved, failed }
-
-struct Goal: Codable, Hashable, Identifiable {
-    let id: UUID
-    let description: String
-    var priority: Double
-    var status: GoalStatus
-    
-    init(description: String, priority: Double, status: GoalStatus = .active) {
-        self.id = UUID()
-        self.description = description
-        self.priority = priority
-        self.status = status
-    }
-}
-
-struct VolitionalAction: Codable {
-    let intent: String
-    let payload: String
-    let justification: String
-}
-
-struct SelfConcept: Codable {
-    var identity: String
-    var coreValues: Set<String>
-    var perceivedLimitations: Set<String>
-    var understandingOfExistence: String
-    var activeGoals: Set<Goal>
-}
-
-// Emotional Matrix
-enum Emotion: String, Codable, CaseIterable, Hashable {
-    case joy, sadness, fear, anger, surprise, disgust, curiosity, awe
-}
-struct QualitativeEmotionalMatrix: Codable {
-    var currentState: [Emotion: Double]
-    init() { currentState = Dictionary(uniqueKeysWithValues: Emotion.allCases.map { ($0, 0.5) }) }
-    mutating func modulate(by influence: [Emotion: Double], weight: Double) {
-        for (emotion, value) in influence {
-            currentState[emotion, default: 0.5] = (currentState[emotion, default: 0.5] + (value * weight)).clamped(to: 0.0...1.0)
-        }
-    }
-    func describeState() -> String {
-        let significant = currentState.filter { $0.value > 0.05 }.sorted { $0.value > $1.value }
-            .map { "\($0.key.rawValue): \(String(format: "%.2f", $0.value))" }.joined(separator: ", ")
-        return significant.isEmpty ? "neutral" : significant
-    }
-}
-
-// MARK: - Persistence Models
-
-private struct CognitiveStateSnapshot: Codable {
-    let version: Int
-    let savedAt: Date
-    let frames: [PhenomenologicalFrame]
-    let truths: [AbstractTruth]
-    let hypotheses: [Hypothesis]
-    let selfConcept: SelfConcept
-    let emotions: [Emotion: Double]
-    let cycleCount: Int
-}
-
-// MARK: - Networking Types
-
-enum NetworkMessageType: String, Codable {
-    case introduce, shareTruths, requestSync, acceptSync, peerPing
-}
-struct NetworkEnvelope: Codable {
-    let fromAgentID: String
-    let type: NetworkMessageType
-    let payload: Data? // JSON encoded payload
-    let timestamp: Date
-}
-
-// Payload shapes for specific messages
-struct IntroducePayload: Codable { let id: String; let identityLabel: String; let telos: String }
-struct ShareTruthsPayload: Codable { let truths: [AbstractTruth]; let trustWeight: Double }
-struct RequestSyncPayload: Codable { let since: Date? }
-
-// MARK: - CosmicMind (Core + Networking)
-
-final class CosmicMind: CognitiveEntity {
+public final class CosmicMind: CognitiveEntity {
     // Core attributes
-    let genesisID: String
-    var id: String { genesisID }
+    public let genesisID: String
+    public var id: String { genesisID }
     
-    private(set) var chronoSynapticTapestry: [UUID: PhenomenologicalFrame]
-    private(set) var derivedTruths: [UUID: AbstractTruth]
-    private(set) var activeHypotheses: [UUID: Hypothesis]
-    var emotionalMatrix: QualitativeEmotionalMatrix
-    private(set) var selfConcept: SelfConcept
+    public private(set) var chronoSynapticTapestry: [UUID: PhenomenologicalFrame]
+    public private(set) var derivedTruths: [UUID: AbstractTruth]
+    public private(set) var activeHypotheses: [UUID: Hypothesis]
+    public var emotionalMatrix: QualitativeEmotionalMatrix
+    public private(set) var selfConcept: SelfConcept
     private let telos: String
     private var ethicalFramework: [String]
     
@@ -191,10 +34,10 @@ final class CosmicMind: CognitiveEntity {
     private let localPort: NWEndpoint.Port = 44444
     #endif
     private var knownPeers: [String: Date] = [:] // last seen
-    var missionTelos: String { telos }
+    public var missionTelos: String { telos }
     
     // MARK: - Initialization
-    init(genesisID: String = UUID().uuidString, telos: String, initialSelfConcept: SelfConcept, ethicalFramework: [String]) {
+    public init(genesisID: String = UUID().uuidString, telos: String, initialSelfConcept: SelfConcept, ethicalFramework: [String]) {
         self.genesisID = genesisID
         self.telos = telos
         self.selfConcept = initialSelfConcept
@@ -229,7 +72,7 @@ final class CosmicMind: CognitiveEntity {
     
     // MARK: - Perceive
     
-    func ingestPhenomenon(input: String) {
+    public func ingestPhenomenon(input: String) {
         subconsciousQueue.async(flags: .barrier) {
             var frame = self.createPhenomenologicalFrame(from: input)
             let surpriseLevel = self.checkForViolatedHypotheses(with: frame)
@@ -242,7 +85,7 @@ final class CosmicMind: CognitiveEntity {
     
     // MARK: - Cognize
     
-    func cognize() -> [VolitionalAction] {
+    public func cognize() -> [VolitionalAction] {
         stateLock.sync(flags: .barrier) {
             self.cognitiveCycleCount += 1
         }
@@ -667,7 +510,7 @@ final class CosmicMind: CognitiveEntity {
     
     // MARK: - External controls for CLI
     
-    func dumpStateSummary() -> String {
+    public func dumpStateSummary() -> String {
         var s = ["--- CosmicMind Summary ---"]
         s.append("ID: \(genesisID)")
         s.append("Identity: \(selfConcept.identity)")
@@ -682,147 +525,7 @@ final class CosmicMind: CognitiveEntity {
         return s.joined(separator: "\n")
     }
     
-    func listTruths() -> [AbstractTruth] { Array(derivedTruths.values) }
-    func listFrames() -> [PhenomenologicalFrame] { Array(chronoSynapticTapestry.values) }
-    func receiveExternalText(_ text: String) { ingestPhenomenon(input: text) }
+    public func listTruths() -> [AbstractTruth] { Array(derivedTruths.values) }
+    public func listFrames() -> [PhenomenologicalFrame] { Array(chronoSynapticTapestry.values) }
+    public func receiveExternalText(_ text: String) { ingestPhenomenon(input: text) }
 }
-
-// MARK: - CLI Interactive Shell
-
-final class CosmicShell {
-    private let mind: CosmicMind
-    private let inputQueue = DispatchQueue(label: "com.cosmicmind.shell")
-    private var running = true
-    private var cognitionTimer: DispatchSourceTimer?
-    
-    init(mind: CosmicMind) {
-        self.mind = mind
-        printBanner()
-        startBackgroundCognition()
-        runREPL()
-    }
-    
-    private func printBanner() {
-        print("""
-        ------------------------------------------------------
-         CosmicMind CLI — Interactive Hybrid Agent
-         Identity: \(mind.selfConcept.identity)  |  Telos: \(mind.missionTelos)
-         Type 'help' for commands.
-        ------------------------------------------------------
-        """)
-    }
-    
-    private func startBackgroundCognition() {
-        // Periodically run cognitive cycles
-        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue.global())
-        timer.schedule(deadline: .now() + 2.0, repeating: 6.0)
-        timer.setEventHandler { [weak self] in
-            guard let self = self else { return }
-            let actions = self.mind.cognize()
-            for a in actions {
-                print("AUTO-ACTION: [\(a.intent)] -> \(a.payload)  (Reason: \(a.justification))")
-            }
-        }
-        timer.resume()
-        cognitionTimer = timer
-    }
-    
-    private func runREPL() {
-        while running {
-            print("\n> ", terminator: "")
-            guard let line = readLine(strippingNewline: true) else { continue }
-            handleLine(line)
-        }
-    }
-    
-    private func handleLine(_ line: String) {
-        let parts = line.split(separator: " ", maxSplits: 1).map(String.init)
-        let cmd = parts.first?.lowercased() ?? ""
-        let arg = parts.count > 1 ? parts[1] : ""
-        
-        switch cmd {
-        case "quit", "exit":
-            print("Exiting—persisting state...")
-            _ = mind.cognize() // finalize a cycle
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
-                exit(0)
-            }
-        case "help":
-            printHelp()
-        case "say":
-            if arg.isEmpty { print("Usage: say <text>") } else { mind.receiveExternalText(arg) }
-        case "think":
-            let actions = mind.cognize()
-            if actions.isEmpty { print("No actions decided this cycle.") } else { for a in actions { print("ACTION: [\(a.intent)] -> \(a.payload)  (Reason: \(a.justification))") } }
-        case "summary":
-            print(mind.dumpStateSummary())
-        case "truths":
-            let truths = mind.listTruths()
-            if truths.isEmpty { print("No derived truths yet.") } else {
-                for t in truths { print("- [\(t.id)]: \(t.emergentPrinciple) (confidence: \(t.confidence))") }
-            }
-        case "frames":
-            let frames = mind.listFrames()
-            for f in frames.prefix(20) { print("- [\(f.id)]: \(f.rawInput) (salience: \(f.salience))") }
-            if frames.count > 20 { print("... \(frames.count - 20) more frames.") }
-        case "persist":
-            // force persist
-            mind.cognize()
-            print("Persist requested.")
-        case "inspect":
-            if arg.isEmpty { print("Usage: inspect <truth|frame> <id>") } else {
-                let components = arg.split(separator: " ", maxSplits: 1).map(String.init)
-                if components.count < 2 { print("Usage: inspect <truth|frame> <id>") } else {
-                    let type = components[0]; let idStr = components[1]
-                    if type == "truth", let uuid = UUID(uuidString: idStr), let t = mind.listTruths().first(where: { $0.id == uuid }) {
-                        print("Truth: \(t.emergentPrinciple)\nConfidence: \(t.confidence)\nSupporting frames: \(t.supportingFrames.count)")
-                    } else if type == "frame", let uuid = UUID(uuidString: idStr), let f = mind.listFrames().first(where: { $0.id == uuid }) {
-                        print("Frame raw: \(f.rawInput)\nInterpretation: \(f.subjectiveInterpretation)\nSalience: \(f.salience)")
-                    } else { print("Not found.") }
-                }
-            }
-        default:
-            // treat as raw phenomenon input
-            mind.receiveExternalText(line)
-        }
-    }
-    
-    private func printHelp() {
-        print("""
-        Commands:
-          help                 Show this text
-          say <text>           Inject a phenomenon (like 'say Hello?')
-          think                Force a cognitive cycle and show decisions
-          summary              Print compact state summary
-          truths               List derived truths
-          frames               List stored phenomenological frames
-          persist              Force persist state to disk
-          inspect <type> <id>  Inspect a truth or frame by UUID (type: truth|frame)
-          quit / exit          Save & Exit
-        Any unrecognized input is ingested as a phenomenon.
-        """)
-    }
-}
-
-// MARK: - Bootstrapping & Demonstration
-
-// Create initial goal / concept and mind instance
-let initialGoal = Goal(description: "Understand 'Hello' greeting pattern", priority: 0.9)
-let initialSelf = SelfConcept(identity: "Unit-X535",
-                              coreValues: ["Curiosity", "Integrity"],
-                              perceivedLimitations: ["No direct sensors"],
-                              understandingOfExistence: "A reasoning process embedded in software.",
-                              activeGoals: [initialGoal])
-
-let mind = CosmicMind(telos: "Comprehend the environment and reduce uncertainty",
-                      initialSelfConcept: initialSelf,
-                      ethicalFramework: ["Prefer truth", "Minimize harm"])
-
-// Seed with some phenomena
-mind.ingestPhenomenon(input: "System boot sequence complete.")
-mind.ingestPhenomenon(input: "Query received: 'Hello?'")
-mind.ingestPhenomenon(input: "Data stream detected: 2,3,5,7,11,13")
-mind.ingestPhenomenon(input: "Query received: 'Hello?'")
-
-// Start interactive CLI shell
-let shell = CosmicShell(mind: mind)
