@@ -67,3 +67,37 @@ Cognitive state is automatically persisted to a JSON file in your document direc
 ## License
 
 See [LICENSE](LICENSE).
+
+## Cyber-OS v5.0 App (Common Lisp)
+
+This repository now also includes `cyber-os-v5.lisp`, a standalone Common Lisp hacking-sim app with:
+
+- A cyberpunk-style command shell (`cyber-os:boot`)
+- An active trace + Black ICE lockout banking loop
+- A Hunchentoot-powered web Matrix interface at `http://localhost:8080`
+- SPA-like asynchronous API calls to `/api/search` and `/api/fuzzy`
+
+### Run Cyber-OS
+
+Prerequisites:
+
+- SBCL
+- Quicklisp
+- `hunchentoot` (auto-loaded by the script)
+
+```bash
+sbcl
+* (load "cyber-os-v5.lisp")
+* (cyber-os:boot)
+```
+
+Core in-shell commands:
+
+- `help`
+- `net-up`
+- `net-down`
+- `scan`
+- `bank`
+- `status`
+- `audit`
+- `exit`
