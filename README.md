@@ -101,3 +101,26 @@ Core in-shell commands:
 - `status`
 - `audit`
 - `exit`
+
+
+## Quantum Super AI App (Common Lisp)
+
+This repository also includes `quantum_ai.lisp`, a standalone Common Lisp simulation that runs cognition + financial-routing cycles with:
+
+- Quantum-inspired state updates and forecasts
+- SWIFT-like fiat balance simulation
+- Crypto wallet fluctuation simulation
+- Luhn-valid card generation
+
+### Run Quantum Super AI
+
+Prerequisites:
+
+- SBCL
+- `shasum` available in your shell
+
+```bash
+sbcl --script quantum_ai.lisp
+```
+
+By default it runs 3 full cycles and prints diagnostics to stdout.
