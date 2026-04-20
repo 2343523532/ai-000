@@ -103,6 +103,28 @@ Core in-shell commands:
 - `exit`
 
 
+
+## Quantum-Entropic Strategist V3 (Common Lisp)
+
+This repository now also includes `quantum_strat.lisp`, a CLOS-based simulation with:
+
+- Cognitive core and market/session encapsulation via CLOS classes
+- Wave-function collapse style signal perturbation with entropy-driven jitter
+- Multi-agent consensus + neural inference + backprop updates
+- Entropy-scaled execution sizing and recursive epoch cycles
+
+### Run Quantum-Entropic Strategist V3
+
+Prerequisites:
+
+- SBCL
+
+```bash
+sbcl --script quantum_strat.lisp
+```
+
+By default it initializes the system, mints a quantum key, and runs 3 cycles.
+
 ## Quantum Super AI App (Common Lisp)
 
 This repository also includes `quantum_ai.lisp`, a standalone Common Lisp simulation that runs cognition + financial-routing cycles with:
